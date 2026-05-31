@@ -7,8 +7,15 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.config import config
-from bot.handlers import start
-
+from bot.handlers.start import start_router
+from bot.handlers.admin import (
+    groups_router,
+    panel_router,
+    schedule_router,
+    subjects_router,
+    users_router,
+)
+from bot.middlewares.db import DbSessionMiddleware
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,10 +29,18 @@ async def main() -> None:
         token=config.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-    storage = MemoryStorage()
-    dp = Dispatcher(storage=storage)
+    dp = Dispatcher(storage=MemoryStorage())
 
-    dp.include_router(start.router)
+    dp.update.middleware(DbSessionMiddleware())
+
+    dp.include_routers(
+        panel_router,
+        groups_router,
+        subjects_router,
+        schedule_router,
+        users_router,
+        start_router,
+    )
 
     logger.info("Starting bot...")
     await bot.delete_webhook(drop_pending_updates=True)
