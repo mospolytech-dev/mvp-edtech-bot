@@ -73,7 +73,7 @@ mvp-edtech-bot/
 ### 1. Клонировать и перейти в папку
 
 ```bash
-git clone https://github.com/your-org/mvp-edtech-bot.git
+git clone https://github.com/mospolytech-dev/mvp-edtech-bot.git
 cd mvp-edtech-bot
 ```
 
