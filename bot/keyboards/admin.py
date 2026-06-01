@@ -5,10 +5,16 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from database.models.group import Group
 from database.models.lesson import Lesson
 from database.models.subject import Subject
-from database.models.user import User
+from database.models.user import User, UserRole
 
 WEEKDAYS = {1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт", 6: "Сб", 7: "Вс"}
 PER_PAGE = 8
+
+ROLE_LABELS = {
+    UserRole.student: "Студент",
+    UserRole.teacher: "Преподаватель",
+    UserRole.admin: "Администратор",
+}
 
 
 class LessonPickCallback(CallbackData, prefix="lp"):
@@ -31,14 +37,59 @@ class PageCallback(CallbackData, prefix="pg"):
     page: int
 
 
+class ApplicationCallback(CallbackData, prefix="app"):
+    action: str   # approve / reject
+    user_id: int
+
+
 def admin_menu_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="👥 Пользователи", callback_data="adm:users"))
+    builder.row(
+        InlineKeyboardButton(text="👥 Пользователи", callback_data="adm:users"),
+        InlineKeyboardButton(text="📋 Заявки", callback_data="adm:applications"),
+    )
     builder.row(
         InlineKeyboardButton(text="🏫 Группы", callback_data="adm:groups"),
         InlineKeyboardButton(text="📚 Дисциплины", callback_data="adm:subjects"),
     )
     builder.row(InlineKeyboardButton(text="📅 Расписание", callback_data="adm:schedule"))
+    return builder.as_markup()
+
+
+def application_review_keyboard(user_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="✅ Одобрить",
+            callback_data=ApplicationCallback(action="approve", user_id=user_id).pack(),
+        ),
+        InlineKeyboardButton(
+            text="❌ Отклонить",
+            callback_data=ApplicationCallback(action="reject", user_id=user_id).pack(),
+        ),
+    )
+    return builder.as_markup()
+
+
+def applications_list_keyboard(users: list[User]) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for u in users:
+        role = ROLE_LABELS.get(u.role, u.role.value)
+        builder.row(InlineKeyboardButton(
+            text=f"👤 {u.full_name} — {role}",
+            callback_data="adm:noop",
+        ))
+        builder.row(
+            InlineKeyboardButton(
+                text="✅ Одобрить",
+                callback_data=ApplicationCallback(action="approve", user_id=u.id).pack(),
+            ),
+            InlineKeyboardButton(
+                text="❌ Отклонить",
+                callback_data=ApplicationCallback(action="reject", user_id=u.id).pack(),
+            ),
+        )
+    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:menu"))
     return builder.as_markup()
 
 

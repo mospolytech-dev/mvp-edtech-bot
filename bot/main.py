@@ -7,8 +7,10 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.config import config
+from bot.handlers.registration import registration_router
 from bot.handlers.start import start_router
 from bot.handlers.admin import (
+    applications_router,
     groups_router,
     panel_router,
     schedule_router,
@@ -35,10 +37,12 @@ async def main() -> None:
 
     dp.include_routers(
         panel_router,
+        applications_router,
         groups_router,
         subjects_router,
         schedule_router,
         users_router,
+        registration_router,
         start_router,
     )
 
