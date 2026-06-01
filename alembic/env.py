@@ -12,6 +12,9 @@ from alembic import context
 from database.base import Base
 import database.models  # noqa: F401
 
+# Добавить если сидите на Windows. Без него не получиться запустить alembic
+# asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 load_dotenv()
 
 config = context.config
