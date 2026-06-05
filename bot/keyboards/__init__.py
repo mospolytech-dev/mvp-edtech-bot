@@ -1,3 +1,3 @@
-from bot.keyboards.inline import main_menu_keyboard
+from bot.keyboards.inline import student_menu_keyboard, teacher_menu_keyboard
 
-__all__ = ["main_menu_keyboard"]
+__all__ = ["student_menu_keyboard", "teacher_menu_keyboard"]

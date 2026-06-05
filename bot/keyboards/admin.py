@@ -74,22 +74,27 @@ def application_review_keyboard(user_id: int) -> InlineKeyboardMarkup:
 def applications_list_keyboard(users: list[User]) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for u in users:
-        role = ROLE_LABELS.get(u.role, u.role.value)
         builder.row(InlineKeyboardButton(
-            text=f"👤 {u.full_name} — {role}",
-            callback_data="adm:noop",
+            text=f"👤 {u.full_name}",
+            callback_data=ApplicationCallback(action="view", user_id=u.id).pack(),
         ))
-        builder.row(
-            InlineKeyboardButton(
-                text="✅ Одобрить",
-                callback_data=ApplicationCallback(action="approve", user_id=u.id).pack(),
-            ),
-            InlineKeyboardButton(
-                text="❌ Отклонить",
-                callback_data=ApplicationCallback(action="reject", user_id=u.id).pack(),
-            ),
-        )
     builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="adm:menu"))
+    return builder.as_markup()
+
+
+def application_detail_keyboard(user_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(
+            text="✅ Одобрить",
+            callback_data=ApplicationCallback(action="approve", user_id=user_id).pack(),
+        ),
+        InlineKeyboardButton(
+            text="❌ Отклонить",
+            callback_data=ApplicationCallback(action="reject", user_id=user_id).pack(),
+        ),
+    )
+    builder.row(InlineKeyboardButton(text="⬅️ К списку заявок", callback_data="adm:applications"))
     return builder.as_markup()
 
 

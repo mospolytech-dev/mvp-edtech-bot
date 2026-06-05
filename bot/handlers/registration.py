@@ -1,3 +1,5 @@
+import re
+
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -12,13 +14,32 @@ from bot.keyboards.inline import (
     RegSubjectCallback,
     RegSubjectPageCallback,
     group_selection_keyboard,
+    role_selection_keyboard,
     subject_selection_keyboard,
 )
 from bot.states.user import RegistrationStates
 from database.crud.groups import get_all_groups, get_group_by_id
 from database.crud.subjects import get_all_subjects
-from database.crud.users import create_user
+from database.crud.users import create_user, delete_user_by_telegram_id
 from database.models.user import UserRole
+
+_CYRILLIC_WORD = re.compile(r'^[А-ЯЁ][а-яё]+(?:-[А-ЯЁ][а-яё]+)?$')
+
+
+def _validate_full_name(name: str) -> str | None:
+    """Возвращает текст ошибки или None если имя корректно."""
+    words = name.split()
+    if len(words) < 2:
+        return "Введите минимум 2 слова — фамилию и имя."
+    if len(words) > 3:
+        return "Слишком много слов. Формат: <b>Фамилия Имя Отчество</b>"
+    for word in words:
+        if not _CYRILLIC_WORD.match(word):
+            return (
+                "Используйте только русские буквы, каждое слово с заглавной.\n"
+                "Пример: <b>Иванов Иван Иванович</b>"
+            )
+    return None
 
 registration_router = Router(name=__name__)
 
@@ -50,6 +71,21 @@ async def pick_role(
     await callback.answer()
 
 
+@registration_router.callback_query(F.data == "reg:reapply")
+async def reapply(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    await delete_user_by_telegram_id(session, callback.from_user.id)
+    await state.set_state(RegistrationStates.waiting_role)
+    await callback.message.edit_text(
+        "Выберите вашу роль для регистрации:",
+        reply_markup=role_selection_keyboard(),
+    )
+    await callback.answer()
+
+
 @registration_router.message(RegistrationStates.waiting_full_name)
 async def process_full_name(
     message: Message,
@@ -57,8 +93,9 @@ async def process_full_name(
     session: AsyncSession,
 ) -> None:
     full_name = (message.text or "").strip()
-    if len(full_name) < 2:
-        await message.answer("Имя слишком короткое. Введите полное имя:")
+    error = _validate_full_name(full_name)
+    if error:
+        await message.answer(error)
         return
 
     data = await state.get_data()
@@ -256,6 +293,14 @@ async def _finish_registration(
 
     if subject_names:
         text += f"\n📚 <b>Дисциплины:</b> {', '.join(subject_names)}"
+
+    if role == UserRole.admin:
+        text += (
+            f"\n\n⚙️ <b>Для активации прав администратора</b> добавьте ID "
+            f"<code>{tg_id}</code> в переменную <code>ADMIN_IDS</code> в файле "
+            f"<code>.env</code> и перезапустите бота.\n"
+            f"<i>(В будущем это будет происходить автоматически без правки .env)</i>"
+        )
 
     for admin_id in config.admin_ids:
         try:

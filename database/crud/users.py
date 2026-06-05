@@ -78,3 +78,10 @@ async def update_user_status(
         user.status = status
         await session.flush()
     return user
+
+
+async def delete_user_by_telegram_id(session: AsyncSession, telegram_id: int) -> None:
+    user = await get_user_by_telegram_id(session, telegram_id)
+    if user:
+        await session.delete(user)
+        await session.flush()

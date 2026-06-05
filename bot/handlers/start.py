@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import config
 from bot.keyboards.admin import admin_menu_keyboard
-from bot.keyboards.inline import main_menu_keyboard, role_selection_keyboard
+from bot.keyboards.inline import reapply_keyboard, role_selection_keyboard, student_menu_keyboard, teacher_menu_keyboard
 from bot.states.user import RegistrationStates
 from database.crud.users import get_user_by_telegram_id
 from database.models.user import UserRole, UserStatus
@@ -38,14 +38,23 @@ async def cmd_start(message: Message, state: FSMContext, session: AsyncSession) 
         return
 
     if user.status == UserStatus.rejected:
-        await message.answer("❌ Ваша заявка была отклонена. Обратитесь к администратору.")
+        await message.answer(
+            "❌ <b>Ваша заявка была отклонена.</b>\n\n"
+            "Вы можете исправить данные и подать повторно.",
+            reply_markup=reapply_keyboard(),
+        )
         return
 
     # active
     if user.role == UserRole.admin:
         await message.answer("<b>Панель администратора</b>", reply_markup=admin_menu_keyboard())
+    elif user.role == UserRole.teacher:
+        await message.answer(
+            f"👋 Привет, <b>{user.full_name}</b>!",
+            reply_markup=teacher_menu_keyboard(),
+        )
     else:
         await message.answer(
             f"👋 Привет, <b>{user.full_name}</b>!",
-            reply_markup=main_menu_keyboard(),
+            reply_markup=student_menu_keyboard(),
         )

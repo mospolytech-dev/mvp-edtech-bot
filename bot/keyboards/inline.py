@@ -121,9 +121,26 @@ def subject_selection_keyboard(
     return builder.as_markup()
 
 
-def main_menu_keyboard() -> InlineKeyboardMarkup:
+def reapply_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(
+        text="🔄 Подать заявку повторно",
+        callback_data="reg:reapply",
+    ))
+    return builder.as_markup()
+
+
+def student_menu_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="📅 Расписание", callback_data="menu:schedule"))
-    builder.row(InlineKeyboardButton(text="✅ Посещаемость", callback_data="menu:attendance"))
-    builder.row(InlineKeyboardButton(text="📊 Оценки", callback_data="menu:grades"))
+    builder.row(InlineKeyboardButton(text="✅ Моя посещаемость", callback_data="menu:attendance"))
+    builder.row(InlineKeyboardButton(text="📊 Мои оценки", callback_data="menu:grades"))
+    return builder.as_markup()
+
+
+def teacher_menu_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(InlineKeyboardButton(text="📅 Расписание", callback_data="menu:schedule"))
+    builder.row(InlineKeyboardButton(text="✅ Отметить посещаемость", callback_data="menu:attendance"))
+    builder.row(InlineKeyboardButton(text="📊 Выставить оценки", callback_data="menu:grades"))
     return builder.as_markup()
