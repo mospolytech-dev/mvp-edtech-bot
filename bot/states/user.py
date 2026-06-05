@@ -9,3 +9,4 @@ class RegistrationStates(StatesGroup):
     waiting_role = State()
     waiting_full_name = State()
     waiting_group = State()
+    waiting_subjects = State()

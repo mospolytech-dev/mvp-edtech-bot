@@ -1,13 +1,22 @@
-from aiogram import Bot, Router
+from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import config
 from bot.keyboards.admin import ApplicationCallback, application_review_keyboard
-from bot.keyboards.inline import RegGroupCallback, RegRoleCallback, group_selection_keyboard
+from bot.keyboards.inline import (
+    RegGroupCallback,
+    RegGroupPageCallback,
+    RegRoleCallback,
+    RegSubjectCallback,
+    RegSubjectPageCallback,
+    group_selection_keyboard,
+    subject_selection_keyboard,
+)
 from bot.states.user import RegistrationStates
 from database.crud.groups import get_all_groups, get_group_by_id
+from database.crud.subjects import get_all_subjects
 from database.crud.users import create_user
 from database.models.user import UserRole
 
@@ -53,15 +62,27 @@ async def process_full_name(
         return
 
     data = await state.get_data()
+    await state.update_data(full_name=full_name)
 
     if data["role"] == "student":
         groups = await get_all_groups(session)
         if groups:
-            await state.update_data(full_name=full_name)
             await state.set_state(RegistrationStates.waiting_group)
             await message.answer(
                 "Выберите вашу <b>группу</b>:",
                 reply_markup=group_selection_keyboard(groups),
+            )
+            return
+
+    if data["role"] == "teacher":
+        subjects = await get_all_subjects(session)
+        if subjects:
+            await state.update_data(selected_subjects=[])
+            await state.set_state(RegistrationStates.waiting_subjects)
+            await message.answer(
+                "Выберите <b>дисциплины</b>, которые вы преподаёте\n"
+                "(можно выбрать несколько, затем нажмите «Готово»):",
+                reply_markup=subject_selection_keyboard(subjects, set(), 0),
             )
             return
 
@@ -74,8 +95,24 @@ async def process_full_name(
         full_name=full_name,
         role=_ROLE_MAP[data["role"]],
         group_id=None,
+        subject_names=[],
         answer_to=message,
     )
+
+
+# ── Студент: пагинация групп ──────────────────────────────────────────────────
+
+@registration_router.callback_query(RegistrationStates.waiting_group, RegGroupPageCallback.filter())
+async def paginate_reg_groups(
+    callback: CallbackQuery,
+    callback_data: RegGroupPageCallback,
+    session: AsyncSession,
+) -> None:
+    groups = await get_all_groups(session)
+    await callback.message.edit_reply_markup(
+        reply_markup=group_selection_keyboard(groups, callback_data.page),
+    )
+    await callback.answer()
 
 
 @registration_router.callback_query(RegistrationStates.waiting_group, RegGroupCallback.filter())
@@ -97,9 +134,88 @@ async def pick_group(
         full_name=data["full_name"],
         role=_ROLE_MAP[data["role"]],
         group_id=group_id,
+        subject_names=[],
         answer_to=callback.message,
     )
 
+
+# ── Преподаватель: выбор дисциплин ────────────────────────────────────────────
+
+@registration_router.callback_query(RegistrationStates.waiting_subjects, RegSubjectCallback.filter())
+async def toggle_subject(
+    callback: CallbackQuery,
+    callback_data: RegSubjectCallback,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    data = await state.get_data()
+    selected: set[int] = set(data.get("selected_subjects", []))
+    if callback_data.subject_id in selected:
+        selected.discard(callback_data.subject_id)
+    else:
+        selected.add(callback_data.subject_id)
+    await state.update_data(selected_subjects=list(selected))
+
+    subjects = await get_all_subjects(session)
+    await callback.message.edit_reply_markup(
+        reply_markup=subject_selection_keyboard(subjects, selected, callback_data.page),
+    )
+    await callback.answer()
+
+
+@registration_router.callback_query(RegistrationStates.waiting_subjects, RegSubjectPageCallback.filter())
+async def paginate_reg_subjects(
+    callback: CallbackQuery,
+    callback_data: RegSubjectPageCallback,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    data = await state.get_data()
+    selected: set[int] = set(data.get("selected_subjects", []))
+    subjects = await get_all_subjects(session)
+    await callback.message.edit_reply_markup(
+        reply_markup=subject_selection_keyboard(subjects, selected, callback_data.page),
+    )
+    await callback.answer()
+
+
+@registration_router.callback_query(RegistrationStates.waiting_subjects, F.data == "reg:subjects_done")
+async def finish_subject_selection(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+) -> None:
+    data = await state.get_data()
+    selected_ids: list[int] = data.get("selected_subjects", [])
+
+    subject_names: list[str] = []
+    if selected_ids:
+        all_subjects = await get_all_subjects(session)
+        subject_names = [s.name for s in all_subjects if s.id in set(selected_ids)]
+
+    await callback.answer()
+    await _finish_registration(
+        bot=callback.bot,
+        session=session,
+        state=state,
+        tg_id=callback.from_user.id,
+        username=callback.from_user.username,
+        full_name=data["full_name"],
+        role=_ROLE_MAP[data["role"]],
+        group_id=None,
+        subject_names=subject_names,
+        answer_to=callback.message,
+    )
+
+
+# ── Noop ──────────────────────────────────────────────────────────────────────
+
+@registration_router.callback_query(F.data == "reg:noop")
+async def reg_noop(callback: CallbackQuery) -> None:
+    await callback.answer()
+
+
+# ── Финализация ───────────────────────────────────────────────────────────────
 
 async def _finish_registration(
     bot: Bot,
@@ -110,6 +226,7 @@ async def _finish_registration(
     full_name: str,
     role: UserRole,
     group_id: int | None,
+    subject_names: list[str],
     answer_to: Message,
 ) -> None:
     user = await create_user(session, tg_id, username, full_name, role, group_id)
@@ -132,9 +249,13 @@ async def _finish_registration(
     )
 
     if group_id:
+        from database.crud.groups import get_group_by_id
         group = await get_group_by_id(session, group_id)
         if group:
             text += f"\n👥 <b>Группа:</b> {group.name} ({group.year})"
+
+    if subject_names:
+        text += f"\n📚 <b>Дисциплины:</b> {', '.join(subject_names)}"
 
     for admin_id in config.admin_ids:
         try:
