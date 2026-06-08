@@ -1,5 +1,5 @@
 from aiogram.filters.callback_data import CallbackData
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.models.group import Group
@@ -8,6 +8,17 @@ from database.models.subject import Subject
 from database.models.user import User, UserRole
 
 WEEKDAYS = {1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт", 6: "Сб", 7: "Вс"}
+
+# (start_hhmm, end_hhmm, label)
+TIME_SLOTS: list[tuple[str, str, str]] = [
+    ("09:00", "10:30", "1 пара  09:00 – 10:30"),
+    ("10:40", "12:10", "2 пара  10:40 – 12:10"),
+    ("12:40", "14:10", "3 пара  12:40 – 14:10"),
+    ("14:20", "15:50", "4 пара  14:20 – 15:50"),
+    ("16:00", "17:30", "5 пара  16:00 – 17:30"),
+    ("17:40", "19:10", "6 пара  17:40 – 19:10"),
+    ("19:20", "20:50", "7 пара  19:20 – 20:50"),
+]
 PER_PAGE = 8
 
 ROLE_LABELS = {
@@ -20,6 +31,10 @@ ROLE_LABELS = {
 class LessonPickCallback(CallbackData, prefix="lp"):
     kind: str   # subject / teacher / group
     value: int
+
+
+class TimeSlotCallback(CallbackData, prefix="ts"):
+    slot: int  # index into TIME_SLOTS
 
 
 class GroupCallback(CallbackData, prefix="grp"):
@@ -214,6 +229,17 @@ def pick_group_keyboard(groups: list[Group]) -> InlineKeyboardMarkup:
         builder.row(InlineKeyboardButton(
             text=f"{g.name} ({g.year})",
             callback_data=LessonPickCallback(kind="group", value=g.id).pack(),
+        ))
+    builder.row(InlineKeyboardButton(text="❌ Отмена", callback_data="adm:cancel"))
+    return builder.as_markup()
+
+
+def pick_time_slot_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for i, (_, _, label) in enumerate(TIME_SLOTS):
+        builder.row(InlineKeyboardButton(
+            text=label,
+            callback_data=TimeSlotCallback(slot=i).pack(),
         ))
     builder.row(InlineKeyboardButton(text="❌ Отмена", callback_data="adm:cancel"))
     return builder.as_markup()

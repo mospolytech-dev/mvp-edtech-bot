@@ -15,6 +15,5 @@ class AdminLessonStates(StatesGroup):
     waiting_teacher = State()
     waiting_group = State()
     waiting_weekday = State()
-    waiting_start_time = State()
-    waiting_end_time = State()
+    waiting_time_slot = State()
     waiting_room = State()

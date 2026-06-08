@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import datetime, date as date_type
 
 from aiogram import Bot, Router, F
 from aiogram.fsm.context import FSMContext
@@ -9,12 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from bot.filters.admin import IsAdmin
 from bot.keyboards.admin import (
     LessonPickCallback,
+    TimeSlotCallback,
+    TIME_SLOTS,
     WEEKDAYS,
     admin_menu_keyboard,
     back_keyboard,
     pick_group_keyboard,
     pick_subject_keyboard,
     pick_teacher_keyboard,
+    pick_time_slot_keyboard,
     schedule_keyboard,
 )
 from bot.states.admin import AdminLessonStates
@@ -96,9 +99,15 @@ async def pick_group(
     callback: CallbackQuery, callback_data: LessonPickCallback, state: FSMContext
 ) -> None:
     await state.update_data(group_id=callback_data.value)
+    today = date_type.today()
+    calendar = SimpleCalendar(show_alerts=True)
+    calendar.set_dates_range(
+        datetime(today.year, today.month, today.day),
+        datetime(today.year + 2, 12, 31),
+    )
     await callback.message.edit_text(
         "Выберите дату занятия:",
-        reply_markup=await SimpleCalendar().start_calendar(),
+        reply_markup=await calendar.start_calendar(year=today.year, month=today.month),
     )
     await state.set_state(AdminLessonStates.waiting_weekday)
     await callback.answer()
@@ -108,7 +117,13 @@ async def pick_group(
 async def pick_date(
     callback: CallbackQuery, callback_data: SimpleCalendarCallback, state: FSMContext, bot: Bot
 ) -> None:
-    selected, date = await SimpleCalendar().process_selection(callback, callback_data)
+    today = date_type.today()
+    calendar = SimpleCalendar(show_alerts=True)
+    calendar.set_dates_range(
+        datetime(today.year, today.month, today.day),
+        datetime(today.year + 2, 12, 31),
+    )
+    selected, date = await calendar.process_selection(callback, callback_data)
     if not selected:
         return
 
@@ -119,60 +134,29 @@ async def pick_date(
     data = await state.get_data()
     day_name = WEEKDAYS[weekday]
     await bot.edit_message_text(
-        f"Дата: {date.strftime('%d.%m.%Y')} ({day_name})\n\n"
-        "Введите время начала занятия (формат: <code>09:00</code>):",
+        f"Дата: {date.strftime('%d.%m.%Y')} ({day_name})\n\nВыберите время занятия:",
         chat_id=data["chat_id"], message_id=data["msg_id"],
-        parse_mode="HTML",
+        reply_markup=pick_time_slot_keyboard(),
     )
-    await state.set_state(AdminLessonStates.waiting_start_time)
+    await state.set_state(AdminLessonStates.waiting_time_slot)
 
 
-@admin_router.message(AdminLessonStates.waiting_start_time)
-async def process_start_time(message: Message, state: FSMContext, bot: Bot) -> None:
-    t = _parse_time(message.text.strip())
-    await message.delete()
+@admin_router.callback_query(AdminLessonStates.waiting_time_slot, TimeSlotCallback.filter())
+async def pick_time_slot(
+    callback: CallbackQuery, callback_data: TimeSlotCallback, state: FSMContext, bot: Bot
+) -> None:
+    start_str, end_str, _ = TIME_SLOTS[callback_data.slot]
+    start_time = datetime.strptime(start_str, "%H:%M").time()
+    end_time = datetime.strptime(end_str, "%H:%M").time()
+    await state.update_data(start_time=start_time, end_time=end_time)
+
     data = await state.get_data()
-
-    if t is None:
-        await bot.edit_message_text(
-            "Неверный формат. Введите время в виде <code>09:00</code>:",
-            chat_id=data["chat_id"], message_id=data["msg_id"], parse_mode="HTML",
-        )
-        return
-
-    await state.update_data(start_time=t)
     await bot.edit_message_text(
-        "Введите время окончания занятия (формат: <code>10:30</code>):",
-        chat_id=data["chat_id"], message_id=data["msg_id"], parse_mode="HTML",
-    )
-    await state.set_state(AdminLessonStates.waiting_end_time)
-
-
-@admin_router.message(AdminLessonStates.waiting_end_time)
-async def process_end_time(message: Message, state: FSMContext, bot: Bot) -> None:
-    t = _parse_time(message.text.strip())
-    await message.delete()
-    data = await state.get_data()
-
-    if t is None:
-        await bot.edit_message_text(
-            "Неверный формат. Введите время в виде <code>10:30</code>:",
-            chat_id=data["chat_id"], message_id=data["msg_id"], parse_mode="HTML",
-        )
-        return
-    if t <= data["start_time"]:
-        await bot.edit_message_text(
-            "Время окончания должно быть позже времени начала. Введите снова:",
-            chat_id=data["chat_id"], message_id=data["msg_id"],
-        )
-        return
-
-    await state.update_data(end_time=t)
-    await bot.edit_message_text(
-        "Введите аудиторию (или <code>-</code> чтобы пропустить):",
+        f"Время: {start_str} – {end_str}\n\nВведите аудиторию (или <code>-</code> чтобы пропустить):",
         chat_id=data["chat_id"], message_id=data["msg_id"], parse_mode="HTML",
     )
     await state.set_state(AdminLessonStates.waiting_room)
+    await callback.answer()
 
 
 @admin_router.message(AdminLessonStates.waiting_room)
@@ -213,10 +197,3 @@ async def cancel_fsm(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer("Отменено")
 
 
-def _parse_time(text: str) -> time | None:
-    for fmt in ("%H:%M", "%H.%M"):
-        try:
-            return datetime.strptime(text, fmt).time()
-        except ValueError:
-            continue
-    return None
