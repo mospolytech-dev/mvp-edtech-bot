@@ -15,6 +15,12 @@ from bot.handlers.teacher import (
     attendance_router as teacher_attendance_router,
     marks_router as teacher_marks_router,
 )
+from bot.handlers.student import (
+    menu_router as student_menu_router,
+    schedule_router as student_schedule_router,
+    attendance_router as student_attendance_router,
+    grades_router as student_grades_router,
+)
 from bot.handlers.admin import (
     applications_router,
     groups_router,
@@ -52,6 +58,10 @@ async def main() -> None:
         teacher_schedule_router,
         teacher_attendance_router,
         teacher_marks_router,
+        student_menu_router,
+        student_schedule_router,
+        student_attendance_router,
+        student_grades_router,
         registration_router,
         start_router,
     )

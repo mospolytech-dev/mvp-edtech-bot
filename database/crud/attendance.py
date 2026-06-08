@@ -2,8 +2,10 @@ from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from database.models.attendance import Attendance, AttendanceStatus
+from database.models.lesson import Lesson
 
 
 async def get_attendance_for_lesson(
@@ -16,6 +18,21 @@ async def get_attendance_for_lesson(
             Attendance.lesson_id == lesson_id,
             Attendance.date == date_,
         )
+    )
+    return list(result.scalars().all())
+
+
+async def get_attendance_for_student(
+    session: AsyncSession,
+    student_id: int,
+) -> list[Attendance]:
+    result = await session.execute(
+        select(Attendance)
+        .options(
+            selectinload(Attendance.lesson).selectinload(Lesson.subject),
+        )
+        .where(Attendance.student_id == student_id)
+        .order_by(Attendance.date.desc())
     )
     return list(result.scalars().all())
 

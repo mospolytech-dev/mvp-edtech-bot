@@ -46,6 +46,19 @@ async def get_lesson_by_id(session: AsyncSession, lesson_id: int) -> Lesson | No
     return result.scalar_one_or_none()
 
 
+async def get_lessons_for_group(session: AsyncSession, group_id: int) -> list[Lesson]:
+    result = await session.execute(
+        select(Lesson)
+        .options(
+            selectinload(Lesson.subject),
+            selectinload(Lesson.teacher),
+        )
+        .where(Lesson.group_id == group_id)
+        .order_by(Lesson.weekday, Lesson.start_time)
+    )
+    return list(result.scalars().all())
+
+
 async def create_lesson(
     session: AsyncSession,
     subject_id: int,

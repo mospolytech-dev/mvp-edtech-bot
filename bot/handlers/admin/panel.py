@@ -1,4 +1,5 @@
-from datetime import time
+import random
+from datetime import date, time, timedelta
 
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -10,8 +11,10 @@ from bot.filters.admin import IsAdmin
 from bot.keyboards.admin import admin_menu_keyboard
 from bot.keyboards.inline import teacher_menu_keyboard, student_menu_keyboard
 from database.crud.users import get_user_by_telegram_id
+from database.models.attendance import Attendance, AttendanceStatus
 from database.models.group import Group
 from database.models.lesson import Lesson
+from database.models.mark import Mark
 from database.models.subject import Subject
 from database.models.user import User, UserRole, UserStatus
 
@@ -183,6 +186,66 @@ async def _ensure_test_lessons(session: AsyncSession, teacher_id: int) -> None:
     await session.flush()
 
 
+async def _seed_attendance_and_marks(session: AsyncSession, student_id: int, group_id: int) -> tuple[int, int]:
+    lessons = list((await session.execute(
+        select(Lesson).where(Lesson.group_id == group_id)
+    )).scalars())
+    if not lessons:
+        return 0, 0
+
+    today = date.today()
+    att_statuses = [
+        AttendanceStatus.present, AttendanceStatus.present, AttendanceStatus.present,
+        AttendanceStatus.absent, AttendanceStatus.late,
+    ]
+
+    att_count = 0
+    mark_count = 0
+
+    for lesson in lessons:
+        # последние 4 занятия по дню недели (назад по неделям)
+        days_back = (today.isoweekday() - lesson.weekday) % 7
+        lesson_date = today - timedelta(days=days_back if days_back else 7)
+
+        for week in range(4):
+            d = lesson_date - timedelta(weeks=week)
+            exists = (await session.execute(
+                select(func.count()).select_from(Attendance).where(
+                    Attendance.lesson_id == lesson.id,
+                    Attendance.student_id == student_id,
+                    Attendance.date == d,
+                )
+            )).scalar()
+            if exists == 0:
+                session.add(Attendance(
+                    lesson_id=lesson.id,
+                    student_id=student_id,
+                    date=d,
+                    status=random.choice(att_statuses),
+                ))
+                att_count += 1
+
+        # 2 оценки на дисциплину
+        existing_marks = (await session.execute(
+            select(func.count()).select_from(Mark).where(
+                Mark.lesson_id == lesson.id,
+                Mark.student_id == student_id,
+            )
+        )).scalar()
+        if existing_marks == 0:
+            for _ in range(2):
+                session.add(Mark(
+                    student_id=student_id,
+                    lesson_id=lesson.id,
+                    teacher_id=lesson.teacher_id,
+                    value=random.randint(3, 5),
+                ))
+                mark_count += 1
+
+    await session.flush()
+    return att_count, mark_count
+
+
 @admin_router.callback_query(F.data == "adm:menu")
 async def back_to_menu(callback: CallbackQuery) -> None:
     await callback.message.edit_text("<b>Панель администратора</b>", reply_markup=admin_menu_keyboard())
@@ -216,15 +279,25 @@ async def seed_test_data(callback: CallbackQuery, session: AsyncSession) -> None
 
 @admin_router.callback_query(F.data == "adm:test:student")
 async def test_as_student(callback: CallbackQuery, session: AsyncSession) -> None:
-    await _upsert_user(
+    group = (await session.execute(select(Group).limit(1))).scalar_one_or_none()
+    group_id = group.id if group else None
+    group_name = group.name if group else "—"
+
+    user = await _upsert_user(
         session,
         tg_id=callback.from_user.id,
         role=UserRole.student,
         full_name=callback.from_user.full_name or "Тест Студент",
-        group_id=1,
+        group_id=group_id,
     )
+
+    att, marks = (0, 0)
+    if group_id:
+        att, marks = await _seed_attendance_and_marks(session, user.id, group_id)
+
+    note = f"\n+{att} отметок посещаемости, +{marks} оценок" if att or marks else ""
     await callback.message.edit_text(
-        "👨‍🎓 <b>Режим студента</b>\nГруппа: 253-324\n\nДля возврата в админку — /start",
+        f"👨‍🎓 <b>Режим студента</b>\nГруппа: {group_name}{note}\n\nДля возврата в админку — /start",
         reply_markup=student_menu_keyboard(),
     )
     await callback.answer()
