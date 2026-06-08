@@ -68,6 +68,7 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="📚 Дисциплины", callback_data="adm:subjects"),
     )
     builder.row(InlineKeyboardButton(text="📅 Расписание", callback_data="adm:schedule"))
+    builder.row(InlineKeyboardButton(text="🧪 Тест-режим", callback_data="adm:test"))
     return builder.as_markup()
 
 

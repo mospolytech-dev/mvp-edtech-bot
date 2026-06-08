@@ -140,7 +140,5 @@ def student_menu_keyboard() -> InlineKeyboardMarkup:
 
 def teacher_menu_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="📅 Расписание", callback_data="menu:schedule"))
-    builder.row(InlineKeyboardButton(text="✅ Отметить посещаемость", callback_data="menu:attendance"))
-    builder.row(InlineKeyboardButton(text="📊 Выставить оценки", callback_data="menu:grades"))
+    builder.row(InlineKeyboardButton(text="📅 Расписание", callback_data="teacher:schedule"))
     return builder.as_markup()

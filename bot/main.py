@@ -9,6 +9,12 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from bot.config import config
 from bot.handlers.registration import registration_router
 from bot.handlers.start import start_router
+from bot.handlers.teacher import (
+    menu_router as teacher_menu_router,
+    schedule_router as teacher_schedule_router,
+    attendance_router as teacher_attendance_router,
+    marks_router as teacher_marks_router,
+)
 from bot.handlers.admin import (
     applications_router,
     groups_router,
@@ -42,6 +48,10 @@ async def main() -> None:
         subjects_router,
         schedule_router,
         users_router,
+        teacher_menu_router,
+        teacher_schedule_router,
+        teacher_attendance_router,
+        teacher_marks_router,
         registration_router,
         start_router,
     )

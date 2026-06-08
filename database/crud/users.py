@@ -38,6 +38,19 @@ async def get_teachers(session: AsyncSession) -> list[User]:
     return list(result.scalars().all())
 
 
+async def get_students_by_group(session: AsyncSession, group_id: int) -> list[User]:
+    result = await session.execute(
+        select(User)
+        .where(
+            User.role == UserRole.student,
+            User.status == UserStatus.active,
+            User.group_id == group_id,
+        )
+        .order_by(User.full_name)
+    )
+    return list(result.scalars().all())
+
+
 async def get_pending_users(session: AsyncSession) -> list[User]:
     result = await session.execute(
         select(User)
